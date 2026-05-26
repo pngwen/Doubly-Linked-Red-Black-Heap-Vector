@@ -48,7 +48,10 @@ build-*/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
+# Makefile is ignored here only for cmake-generated ones;
+# the hand-written project Makefile is explicitly tracked below.
 Makefile
+!Makefile
 install_manifest.txt
 compile_commands.json
 
@@ -67,3 +70,4 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+test_dlrb
