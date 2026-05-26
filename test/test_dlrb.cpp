@@ -595,6 +595,193 @@ void test_heap_sort() {
     std::cout << '\n';
 }
 
+// ─── 21. insert_front ────────────────────────────────────────────────────────
+void test_insert_front() {
+    SECTION("21. insert_front");
+    DLRBHeapVector<int> c;
+    c.insert(3);
+    c.insert(5);
+    c.insert_front(1); // list should now be: 1 3 5
+    c.insert_front(0); // list: 0 1 3 5
+
+    CHECK(to_vec(c.list_view()) == (std::vector<int>{0,1,3,5}));
+    // RB and heap should still contain all four values
+    CHECK(c.rb_min()   == 0);
+    CHECK(c.heap_top() == 5);
+    CHECK(rb_invariants(c));
+    CHECK(heap_valid(c));
+    std::cout << "  list after two insert_fronts: ";
+    for (int v : c.list_view()) std::cout << v << ' ';
+    std::cout << '\n';
+}
+
+// ─── 22. insert_after ────────────────────────────────────────────────────────
+void test_insert_after() {
+    SECTION("22. insert_after");
+    DLRBHeapVector<int> c;
+    auto ia = c.insert(10);
+    auto ib = c.insert(30);
+    // Insert 20 after 10: list should be 10 20 30
+    auto ic = c.insert_after(20, ia);
+    CHECK(to_vec(c.list_view()) == (std::vector<int>{10,20,30}));
+    // Insert 25 after 20: list → 10 20 25 30
+    c.insert_after(25, ic);
+    CHECK(to_vec(c.list_view()) == (std::vector<int>{10,20,25,30}));
+    // Insert 35 after 30 (the tail): list → 10 20 25 30 35
+    c.insert_after(35, ib);
+    CHECK(to_vec(c.list_view()) == (std::vector<int>{10,20,25,30,35}));
+
+    CHECK(rb_invariants(c));
+    CHECK(heap_valid(c));
+    auto rb = to_vec(c.rb_view());
+    CHECK(std::is_sorted(rb.begin(), rb.end()));
+    std::cout << "  list: "; for (int v : c.list_view()) std::cout << v << ' ';
+    std::cout << "\n  rb  : "; for (int v : c.rb_view())   std::cout << v << ' ';
+    std::cout << '\n';
+}
+
+// ─── 23. insert_before ───────────────────────────────────────────────────────
+void test_insert_before() {
+    SECTION("23. insert_before");
+    DLRBHeapVector<int> c;
+    auto ia = c.insert(10);
+    auto ib = c.insert(30);
+    // Insert 20 before 30: list → 10 20 30
+    c.insert_before(20, ib);
+    CHECK(to_vec(c.list_view()) == (std::vector<int>{10,20,30}));
+    // Insert 5 before 10 (the head): list → 5 10 20 30
+    c.insert_before(5, ia);
+    CHECK(to_vec(c.list_view()) == (std::vector<int>{5,10,20,30}));
+
+    CHECK(rb_invariants(c));
+    CHECK(heap_valid(c));
+    std::cout << "  list: "; for (int v : c.list_view()) std::cout << v << ' ';
+    std::cout << '\n';
+}
+
+// ─── 24. list_move_to_front ───────────────────────────────────────────────────
+void test_move_to_front() {
+    SECTION("24. list_move_to_front");
+    DLRBHeapVector<int> c;
+    for (int v : {1,2,3,4,5}) c.insert(v);
+
+    // Move the tail (5) to the front
+    auto it = c.list_end(); --it;
+    CHECK(*it == 5);
+    c.list_move_to_front(it.index());
+    CHECK(to_vec(c.list_view()) == (std::vector<int>{5,1,2,3,4}));
+
+    // Move an interior element (3) to the front
+    auto jt = c.list_begin(); ++jt; ++jt; // points at 2
+    ++jt;                                  // points at 3
+    c.list_move_to_front(jt.index());
+    CHECK(to_vec(c.list_view()) == (std::vector<int>{3,5,1,2,4}));
+
+    // Move the head to the front (no-op)
+    c.list_move_to_front(c.list_begin().index());
+    CHECK(*c.list_begin() == 3);
+
+    CHECK(rb_invariants(c));
+    CHECK(heap_valid(c));
+    std::cout << "  list: "; for (int v : c.list_view()) std::cout << v << ' ';
+    std::cout << '\n';
+}
+
+// ─── 25. list_move_to_back ────────────────────────────────────────────────────
+void test_move_to_back() {
+    SECTION("25. list_move_to_back");
+    DLRBHeapVector<int> c;
+    for (int v : {1,2,3,4,5}) c.insert(v);
+
+    // Move the head (1) to the back
+    c.list_move_to_back(c.list_begin().index());
+    CHECK(to_vec(c.list_view()) == (std::vector<int>{2,3,4,5,1}));
+
+    // Move an interior element (4) to the back
+    auto it = c.list_begin(); ++it; ++it; // points at 4
+    c.list_move_to_back(it.index());
+    CHECK(to_vec(c.list_view()) == (std::vector<int>{2,3,5,1,4}));
+
+    // Move the tail to the back (no-op)
+    auto jt = c.list_end(); --jt;
+    c.list_move_to_back(jt.index());
+    jt = c.list_end(); --jt;
+    CHECK(*jt == 4);
+
+    CHECK(rb_invariants(c));
+    CHECK(heap_valid(c));
+    std::cout << "  list: "; for (int v : c.list_view()) std::cout << v << ' ';
+    std::cout << '\n';
+}
+
+// ─── 26. list_move_after / list_move_before ───────────────────────────────────
+void test_move_after_before() {
+    SECTION("26. list_move_after / list_move_before");
+    DLRBHeapVector<int> c;
+    std::vector<std::size_t> idx;
+    for (int v : {1,2,3,4,5}) idx.push_back(c.insert(v));
+    // idx[0]=1, idx[1]=2, idx[2]=3, idx[3]=4, idx[4]=5
+
+    // Move 5 (idx[4]) to after 1 (idx[0]): 1 5 2 3 4
+    c.list_move_after(idx[4], idx[0]);
+    CHECK(to_vec(c.list_view()) == (std::vector<int>{1,5,2,3,4}));
+
+    // Move 1 (idx[0]) to before 4 (idx[3]): 5 2 3 1 4
+    c.list_move_before(idx[0], idx[3]);
+    CHECK(to_vec(c.list_view()) == (std::vector<int>{5,2,3,1,4}));
+
+    // No-op: move_after self  (idx == after_idx)
+    c.list_move_after(idx[2], idx[2]);
+    CHECK(to_vec(c.list_view()) == (std::vector<int>{5,2,3,1,4}));
+
+    // No-op: val=3(node2) is already directly after val=2(node1)
+    // i.e. nd(node1).list_next == node2  → early-return branch
+    c.list_move_after(idx[2], idx[1]);
+    CHECK(to_vec(c.list_view()) == (std::vector<int>{5,2,3,1,4}));
+
+    // No-op: val=1(node0) is already directly before val=4(node3)
+    // i.e. nd(node3).list_prev == node0  → early-return branch
+    c.list_move_before(idx[0], idx[3]);
+    CHECK(to_vec(c.list_view()) == (std::vector<int>{5,2,3,1,4}));
+
+    CHECK(rb_invariants(c));
+    CHECK(heap_valid(c));
+    std::cout << "  final list: "; for (int v : c.list_view()) std::cout << v << ' ';
+    std::cout << '\n';
+}
+
+// ─── 27. Reorder + erase correctness ─────────────────────────────────────────
+void test_reorder_then_erase() {
+    SECTION("27. Erase after list reordering");
+    DLRBHeapVector<int> c;
+    std::vector<std::size_t> idx;
+    for (int v : {10,20,30,40,50}) idx.push_back(c.insert(v));
+
+    // Scramble the list order
+    c.list_move_to_front(idx[4]);   // 50 10 20 30 40
+    c.list_move_after(idx[2], idx[0]); // 50 10 30 20 40 — wait, idx[0]=10
+    // Let's trace: after move_to_front(50): 50 10 20 30 40
+    // move_after(idx[2]=30, idx[0]=10) — move 30 to after 10: 50 10 30 20 40
+
+    // Now erase the new head (50) via list_begin
+    c.erase(c.list_begin().index());
+    CHECK(c.size() == 4);
+    CHECK(*c.list_begin() == 10);
+
+    // Erase 30 (now at index 1 in list) by its stored node index
+    c.erase(idx[2]);
+    CHECK(c.size() == 3);
+
+    // The remaining three (10, 20, 40) should still be consistent
+    CHECK(rb_invariants(c));
+    CHECK(heap_valid(c));
+    auto all = to_vec(c.rb_view());
+    std::sort(all.begin(), all.end());
+    CHECK(all == (std::vector<int>{10,20,40}));
+    std::cout << "  remaining (rb order): "; for (int v : c.rb_view()) std::cout << v << ' ';
+    std::cout << '\n';
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  main
 // ─────────────────────────────────────────────────────────────────────────────
@@ -623,6 +810,13 @@ int main() {
     test_view_consistency();
     test_index_stability();
     test_heap_sort();
+    test_insert_front();
+    test_insert_after();
+    test_insert_before();
+    test_move_to_front();
+    test_move_to_back();
+    test_move_after_before();
+    test_reorder_then_erase();
 
     std::cout << "\n══════════════════════════════════════════════\n";
     std::cout << "  Results: " << g_pass << " passed";

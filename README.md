@@ -134,15 +134,57 @@ DLRBHeapVector<Task, decltype(by_priority), decltype(by_priority)> c(
 ### Insertion
 
 ```cpp
-std::size_t idx = c.insert(value);      // copy
-std::size_t idx = c.insert(std::move(value)); // move
+std::size_t idx = c.insert(value);           // append to list tail (default)
+std::size_t idx = c.insert(std::move(value));
+
+std::size_t idx = c.insert_front(value);     // prepend to list head
+std::size_t idx = c.insert_after(value, after_idx);   // after a specific node
+std::size_t idx = c.insert_before(value, before_idx); // before a specific node
 ```
 
-Returns a **stable node index** that:
+All five forms return a **stable node index** that:
 - Is valid for the lifetime of the element
 - Is unaffected by any future insertions or reallocations
 - Can be used for O(1) direct access via `c[idx]`
 - Is the key to `erase()` — hold onto it if you plan to delete
+
+The positional forms (`insert_front`, `insert_after`, `insert_before`) control where the new element appears in the **linked-list view only**. Its position in the RB tree and heap is determined by its value as normal.
+
+```cpp
+auto ia = c.insert(10);   // list: 10
+auto ib = c.insert(50);   // list: 10 50
+c.insert_after(20, ia);   // list: 10 20 50
+c.insert_before(40, ib);  // list: 10 20 40 50
+c.insert_front(5);        // list:  5 10 20 40 50
+// RB view is still sorted: 5 10 20 40 50
+// Heap top is still 50
+```
+
+### List reordering
+
+Move an **existing** node to any list position in O(1). The RB tree and heap are completely unaffected — only the doubly-linked list is rewired.
+
+```cpp
+c.list_move_to_front(idx);              // move node to head
+c.list_move_to_back(idx);               // move node to tail
+c.list_move_after(idx, after_idx);      // move node to just after after_idx
+c.list_move_before(idx, before_idx);    // move node to just before before_idx
+```
+
+If the node is already in the requested position the call is a no-op (including `idx == after_idx` / `idx == before_idx`).
+
+```cpp
+// Maintain an LRU cache order: promote the most-recently-used node to front
+void touch(std::size_t node_idx) {
+    cache.list_move_to_front(node_idx);
+}
+
+// Evict the least-recently-used node (tail of the list)
+void evict() {
+    auto it = cache.list_end(); --it;
+    cache.erase(it.index());
+}
+```
 
 ### Erasure
 
@@ -376,8 +418,9 @@ The test suite validates all four views on every mutation, including a 750-opera
 
 | Operation | Vector | List | RB Tree | Heap |
 |---|---|---|---|---|
-| `insert` | O(1) amortised | O(1) | O(log n) | O(log n) |
+| `insert` / `insert_front` / `insert_after` / `insert_before` | O(1) amortised | O(1) | O(log n) | O(log n) |
 | `erase` | O(1) | O(1) | O(log n) | O(log n) |
+| `list_move_*` | — | **O(1)** | — | — |
 | Iterator step | O(1) | O(1) | O(log n) amortised | O(1) |
 | Top / min / max | — | — | O(log n) | O(1) |
 | `rb_find` | — | — | O(log n) | — |

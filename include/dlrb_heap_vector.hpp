@@ -282,10 +282,78 @@ public:
     std::size_t capacity() const noexcept { return nodes_.capacity(); }
     void        reserve(std::size_t n) { nodes_.reserve(n); heap_.reserve(n); }
 
-    // ── Insertion ─────────────────────────────────────────────────────────────
+    // ── Insertion — append to list tail (default) ────────────────────────────
     // Returns the stable node index for the inserted element.
     std::size_t insert(const T& val) { return insert_impl(T(val)); }
     std::size_t insert(T&&      val) { return insert_impl(std::move(val)); }
+
+    // ── Insertion — positional in the linked list ─────────────────────────────
+    // The new element is placed at the requested list position; its position
+    // in the RB tree and heap is determined by its value as normal.
+
+    // Insert at the head of the list.
+    std::size_t insert_front(const T& val) { return insert_front_impl(T(val)); }
+    std::size_t insert_front(T&&      val) { return insert_front_impl(std::move(val)); }
+
+    // Insert immediately after the node at after_idx.
+    std::size_t insert_after(const T& val, std::size_t after_idx) {
+        return insert_after_impl(T(val), after_idx);
+    }
+    std::size_t insert_after(T&& val, std::size_t after_idx) {
+        return insert_after_impl(std::move(val), after_idx);
+    }
+
+    // Insert immediately before the node at before_idx.
+    std::size_t insert_before(const T& val, std::size_t before_idx) {
+        return insert_before_impl(T(val), before_idx);
+    }
+    std::size_t insert_before(T&& val, std::size_t before_idx) {
+        return insert_before_impl(std::move(val), before_idx);
+    }
+
+    // ── List reordering — move an existing node to a new list position ────────
+    // All moves are O(1).  The RB tree and heap are completely unaffected;
+    // only the list_prev / list_next links of the touched nodes change.
+
+    // Move node idx to the front (head) of the list.
+    void list_move_to_front(std::size_t idx) {
+        assert(idx < nodes_.size() && nd(idx).alive);
+        if (idx == list_head_) return;
+        list_remove(idx);
+        list_push_front(idx);
+    }
+
+    // Move node idx to the back (tail) of the list.
+    void list_move_to_back(std::size_t idx) {
+        assert(idx < nodes_.size() && nd(idx).alive);
+        if (idx == list_tail_) return;
+        list_remove(idx);
+        list_push_back(idx);
+    }
+
+    // Move node idx to immediately after after_idx.
+    // Passing idx == after_idx, or after_idx already being idx's predecessor,
+    // are both no-ops.
+    void list_move_after(std::size_t idx, std::size_t after_idx) {
+        assert(idx < nodes_.size() && nd(idx).alive);
+        assert(after_idx < nodes_.size() && nd(after_idx).alive);
+        if (idx == after_idx)                   return;
+        if (nd(after_idx).list_next == idx)     return; // already in place
+        list_remove(idx);
+        list_splice_after(idx, after_idx);
+    }
+
+    // Move node idx to immediately before before_idx.
+    void list_move_before(std::size_t idx, std::size_t before_idx) {
+        assert(idx < nodes_.size() && nd(idx).alive);
+        assert(before_idx < nodes_.size() && nd(before_idx).alive);
+        if (idx == before_idx)                   return;
+        if (nd(before_idx).list_prev == idx)     return; // already in place
+        list_remove(idx);
+        std::size_t prev = nd(before_idx).list_prev;
+        if (prev == NULL_IDX) list_push_front(idx);
+        else                  list_splice_after(idx, prev);
+    }
 
     // ── Erasure ───────────────────────────────────────────────────────────────
     // All iterator types expose .index() to get the node index for erase().
@@ -408,12 +476,30 @@ private:
     }
 
     // ── Doubly-linked list ────────────────────────────────────────────────────
+    void list_push_front(std::size_t idx) {
+        nd(idx).list_next = list_head_;
+        nd(idx).list_prev = NULL_IDX;
+        if (list_head_ != NULL_IDX) nd(list_head_).list_prev = idx;
+        else                        list_tail_ = idx;
+        list_head_ = idx;
+    }
+
     void list_push_back(std::size_t idx) {
         nd(idx).list_prev = list_tail_;
         nd(idx).list_next = NULL_IDX;
         if (list_tail_ != NULL_IDX) nd(list_tail_).list_next = idx;
         else                        list_head_ = idx;
         list_tail_ = idx;
+    }
+
+    // Place the (unlinked) node idx immediately after the live node after_idx.
+    void list_splice_after(std::size_t idx, std::size_t after_idx) {
+        std::size_t next = nd(after_idx).list_next;
+        nd(idx).list_prev       = after_idx;
+        nd(idx).list_next       = next;
+        nd(after_idx).list_next = idx;
+        if (next != NULL_IDX) nd(next).list_prev = idx;
+        else                  list_tail_ = idx;
     }
 
     void list_remove(std::size_t idx) {
@@ -696,10 +782,45 @@ private:
         heap_sift_down(nd(last_idx).heap_pos);
     }
 
-    // ── Combined insert ───────────────────────────────────────────────────────
+    // ── Combined insert helpers ───────────────────────────────────────────────
     std::size_t insert_impl(T&& val) {
         std::size_t idx = alloc_node(std::move(val));
         list_push_back(idx);
+        rb_insert(idx);
+        heap_push(idx);
+        ++live_count_;
+        return idx;
+    }
+
+    std::size_t insert_front_impl(T&& val) {
+        std::size_t idx = alloc_node(std::move(val));
+        list_push_front(idx);
+        rb_insert(idx);
+        heap_push(idx);
+        ++live_count_;
+        return idx;
+    }
+
+    std::size_t insert_after_impl(T&& val, std::size_t after_idx) {
+        assert(after_idx < nodes_.size() && nodes_[after_idx].alive);
+        // Capture the successor index before alloc_node can reallocate nodes_.
+        // (The index itself is stable; we just want to read it before any
+        //  potential move of the underlying storage.)
+        std::size_t idx = alloc_node(std::move(val));
+        list_splice_after(idx, after_idx);
+        rb_insert(idx);
+        heap_push(idx);
+        ++live_count_;
+        return idx;
+    }
+
+    std::size_t insert_before_impl(T&& val, std::size_t before_idx) {
+        assert(before_idx < nodes_.size() && nodes_[before_idx].alive);
+        // Read the predecessor index before alloc_node can reallocate.
+        std::size_t prev = nd(before_idx).list_prev;
+        std::size_t idx  = alloc_node(std::move(val));
+        if (prev == NULL_IDX) list_push_front(idx);
+        else                  list_splice_after(idx, prev);
         rb_insert(idx);
         heap_push(idx);
         ++live_count_;
