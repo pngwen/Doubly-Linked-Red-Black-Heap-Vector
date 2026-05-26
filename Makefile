@@ -2,17 +2,22 @@
 #  DLRBHeapVector — Makefile
 # ─────────────────────────────────────────────────────────────────────────────
 
-# ── Toolchain ──────────────────────────────────────────────────────────────────
+# ── Toolchain ─────────────────────────────────────────────────────────────────
 CXX      ?= c++
 TARGET    = test_dlrb
+DEMO      = draco_queue
 
 # ── Directories ───────────────────────────────────────────────────────────────
 SRCDIR    = test
+DEMODIR   = demo
 INCDIR    = include
 BUILDDIR  = build
 
 SRC       = $(SRCDIR)/test_dlrb.cpp
 OBJ       = $(BUILDDIR)/test_dlrb.o
+
+DEMO_SRC  = $(DEMODIR)/draco_queue.cpp
+DEMO_OBJ  = $(BUILDDIR)/draco_queue.o
 
 # ── Flags shared by all builds ────────────────────────────────────────────────
 CXXFLAGS_COMMON  = -std=c++17 -Wall -Wextra -Wpedantic -Wshadow \
@@ -37,27 +42,44 @@ endif
 #  Targets
 # ─────────────────────────────────────────────────────────────────────────────
 
-.PHONY: all run clean release asan help
+.PHONY: all run demo demo_run clean release asan help
 
-all: $(TARGET)
+all: $(TARGET) $(DEMO)
 
-# Link
+# ── Test suite ────────────────────────────────────────────────────────────────
+
 $(TARGET): $(OBJ)
 	$(CXX) $(LDFLAGS) -o $@ $^
 	@echo "  Linked → $(TARGET)  [MODE=$(MODE)]"
 
-# Compile
 $(OBJ): $(SRC) $(INCDIR)/dlrb_heap_vector.hpp | $(BUILDDIR)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 	@echo "  Compiled $<"
 
-$(BUILDDIR):
-	mkdir -p $(BUILDDIR)
-
-# Convenience shortcuts
-run: all
+run: $(TARGET)
 	@echo "\n── Running $(TARGET) ──────────────────────────────────"
 	./$(TARGET)
+
+# ── Demo — Ministry of Dracological Incident Management ──────────────────────
+
+$(DEMO): $(DEMO_OBJ)
+	$(CXX) $(LDFLAGS) -o $@ $^
+	@echo "  Linked → $(DEMO)  [MODE=$(MODE)]"
+
+$(DEMO_OBJ): $(DEMO_SRC) $(INCDIR)/dlrb_heap_vector.hpp | $(BUILDDIR)
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+	@echo "  Compiled $<"
+
+demo: $(DEMO)
+
+demo_run: $(DEMO)
+	@echo "\n── Running $(DEMO) ──────────────────────────────────"
+	./$(DEMO)
+
+# ── Utility ───────────────────────────────────────────────────────────────────
+
+$(BUILDDIR):
+	mkdir -p $(BUILDDIR)
 
 release:
 	$(MAKE) MODE=release
@@ -66,15 +88,17 @@ asan:
 	$(MAKE) MODE=asan
 
 clean:
-	rm -rf $(BUILDDIR) $(TARGET)
+	rm -rf $(BUILDDIR) $(TARGET) $(DEMO)
 	@echo "  Cleaned."
 
 help:
 	@echo "Targets:"
-	@echo "  make            — debug build (default)"
-	@echo "  make run        — build + run tests"
-	@echo "  make release    — optimised build (MODE=release)"
-	@echo "  make asan       — AddressSanitizer + UBSan build (MODE=asan)"
-	@echo "  make clean      — remove build artefacts"
+	@echo "  make              — build tests + demo (debug, default)"
+	@echo "  make run          — build + run test suite"
+	@echo "  make demo         — build the Ministry of Dracological demo"
+	@echo "  make demo_run     — build + run the demo"
+	@echo "  make release      — optimised build (MODE=release)"
+	@echo "  make asan         — AddressSanitizer + UBSan build (MODE=asan)"
+	@echo "  make clean        — remove all build artefacts"
 	@echo ""
 	@echo "Override compiler:  make CXX=g++"

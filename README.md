@@ -448,6 +448,32 @@ A: That is not a question. But you're right, and we stand by it.
 
 ---
 
+---
+
+## Demo: The Ministry of Dracological Incident Management
+
+`demo/draco_queue.cpp` is a fully operational simulation of a fictional bureaucratic agency that tracks dragon-related conflagrations across the realm. It uses `DLRBHeapVector` as a **deque** and has deeply contrived but legally binding reasons to also need the heap and the RB tree.
+
+```bash
+make demo_run
+```
+
+The program walks through seven phases of a working day at the Ministry:
+
+| Phase | Operation | API used |
+|---|---|---|
+| 1 · Morning intake | Enqueue overnight reports at the back | `insert()` |
+| 2 · Emergency intake | A Tier-1 Conflagration invokes the *Preposterously Prepended Emergency Procedure* | `insert_front()` |
+| 3 · Bureaucratic Priority Elevation | A clerk re-grades an incident; it jumps the queue | `list_move_to_front()` |
+| 4 · Chief Inspector's Severity Audit | Inspector Barnabas Crumplewick III demands carnage ranked by severity | `heap_top()`, heap drain via `erase()` |
+| 5 · RDCB Compliance | The Regulatory Dragon Census Bureau requests the alphabetical register; one dragon is found to lack a Continental Conflagration Licence and is demoted to the back of the queue pending tribunal review | `rb_view()`, `rb_find()`, `list_move_to_back()` |
+| 6 · Duty Officer Processing | Officer Snodgrass processes the queue front-to-back until the ink runs out | `list_begin()`, `erase()` |
+| 7 · Shutdown | All four views confirmed intact; Ministry possibly on fire | `empty()` |
+
+The entire operation is spelled out in the source comments with all the gravity the situation deserves.
+
+---
+
 ## License
 
 MIT. Take it, use it, marvel at it. Attribution appreciated but not required.
